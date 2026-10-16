@@ -1,0 +1,89 @@
+# Python byte-code and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# Packaging / Distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Database and runtime data files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+data/*.db
+data/*.db-journal
+data/*.sqlite
+data/*.sqlite3
+
+# Uploads, audio, FAISS vector indices, and artifacts (keep directory structure)
+data/uploads/*
+!data/uploads/.gitkeep
+data/audio/*
+!data/audio/.gitkeep
+data/faiss_indices/*
+!data/faiss_indices/.gitkeep
+data/artifacts/*
+!data/artifacts/.gitkeep
+
+# Unit test & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Linting and type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# OS and IDE files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

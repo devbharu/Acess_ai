@@ -1,0 +1,136 @@
+# ==========================================
+# Operating System Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ==========================================
+# Python & Virtual Environments
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# Testing & Coverage (Python)
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Type checking & Linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ==========================================
+# Node.js & Frontend (Vite / React)
+# ==========================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.env.local
+frontend/.env.*.local
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Vite / Vitest cache
+.vite/
+frontend/.vite/
+
+# ==========================================
+# Backend Runtime & Data Storage
+# ==========================================
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.sqlite
+backend/data/*.sqlite3
+
+# Uploads, Audio, FAISS indices & Artifacts (keep directory structure with .gitkeep)
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend/data/audio/*
+!backend/data/audio/.gitkeep
+backend/data/faiss_indices/*
+!backend/data/faiss_indices/.gitkeep
+backend/data/artifacts/*
+!backend/data/artifacts/.gitkeep
+
+# ==========================================
+# IDE & Code Editors
+# ==========================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~

@@ -2,16 +2,6 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-UPLOADS_DIR = DATA_DIR / "uploads"
-AUDIO_DIR = DATA_DIR / "audio"
-FAISS_DIR = DATA_DIR / "faiss_indices"
-
-ARTIFACTS_DIR = DATA_DIR / "artifacts"
-
-# Create required directories
-for d in (DATA_DIR, UPLOADS_DIR, AUDIO_DIR, FAISS_DIR, ARTIFACTS_DIR):
-    d.mkdir(parents=True, exist_ok=True)
 
 try:
     from dotenv import load_dotenv
@@ -19,6 +9,22 @@ try:
     load_dotenv(BASE_DIR.parent / ".env")
 except ImportError:
     pass
+
+_raw_data_dir = os.environ.get("DATA_DIR")
+if _raw_data_dir:
+    _dp = Path(_raw_data_dir)
+    DATA_DIR = _dp if _dp.is_absolute() else (BASE_DIR / _dp).resolve()
+else:
+    DATA_DIR = BASE_DIR / "data"
+
+UPLOADS_DIR = DATA_DIR / "uploads"
+AUDIO_DIR = DATA_DIR / "audio"
+FAISS_DIR = DATA_DIR / "faiss_indices"
+ARTIFACTS_DIR = DATA_DIR / "artifacts"
+
+# Create required directories
+for d in (DATA_DIR, UPLOADS_DIR, AUDIO_DIR, FAISS_DIR, ARTIFACTS_DIR):
+    d.mkdir(parents=True, exist_ok=True)
 
 _raw_db = os.environ.get("DATABASE_PATH")
 if _raw_db:

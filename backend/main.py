@@ -823,5 +823,6 @@ app = create_app()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
-    print(f"Starting AccessAI backend server on http://localhost:{port}...")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1")
+    print(f"Starting AccessAI backend server on http://0.0.0.0:{port}...")
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)

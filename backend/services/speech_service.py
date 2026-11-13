@@ -5,27 +5,28 @@ import logging
 import wave
 import struct
 import math
+import gc
 from pathlib import Path
 from typing import Optional
-from ..config import AUDIO_DIR
+from ..config import AUDIO_DIR, GROQ_API_KEY
 
 logger = logging.getLogger(__name__)
 
-# Patch av.open if needed to maintain compatibility between PyAV (>=14/19) and faster-whisper
-try:
-    import av
-    if hasattr(av, "open"):
-        _orig_av_open = av.open
-        def _safe_av_open(*args, **kwargs):
-            kwargs.pop("metadata_errors", None)
-            kwargs.pop("metadata_encoding", None)
-            return _orig_av_open(*args, **kwargs)
-        av.open = _safe_av_open
-except Exception:
-    pass
-
-# Cache for Whisper models
+# Cache for local Whisper model (bounded to at most 1 active model)
 _whisper_cache = {}
+
+def _apply_av_patch():
+    try:
+        import av
+        if hasattr(av, "open"):
+            _orig_av_open = av.open
+            def _safe_av_open(*args, **kwargs):
+                kwargs.pop("metadata_errors", None)
+                kwargs.pop("metadata_encoding", None)
+                return _orig_av_open(*args, **kwargs)
+            av.open = _safe_av_open
+    except Exception:
+        pass
 
 VOICE_MAP = {
     "af_heart": "Samantha",
@@ -43,11 +44,31 @@ class SpeechService:
         """
         model_size = model_name if model_name in ["tiny", "base", "small"] else "base"
         
+        # 1. Fast zero-RAM cloud transcription via Groq Audio API
+        if GROQ_API_KEY:
+            try:
+                from groq import Groq
+                client = Groq(api_key=GROQ_API_KEY)
+                with open(file_path, "rb") as f:
+                    resp = client.audio.transcriptions.create(
+                        model="whisper-large-v3-turbo",
+                        file=(os.path.basename(file_path), f),
+                        language=language if language and language != "auto" else None,
+                    )
+                if resp and hasattr(resp, "text") and resp.text.strip():
+                    return resp.text.strip()
+            except Exception as e:
+                logger.warning("Groq audio transcription failed, falling back to local faster-whisper: %s", e)
+
+        # 2. Local fallback using faster-whisper with bounded memory cache
         try:
+            _apply_av_patch()
             from faster_whisper import WhisperModel
 
             if model_size not in _whisper_cache:
-                logger.info("Loading Whisper model: %s", model_size)
+                _whisper_cache.clear()
+                gc.collect()
+                logger.info("Loading local Whisper model: %s", model_size)
                 _whisper_cache[model_size] = WhisperModel(model_size, device="cpu", compute_type="int8")
 
             model = _whisper_cache[model_size]

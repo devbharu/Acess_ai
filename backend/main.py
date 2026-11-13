@@ -57,6 +57,22 @@ def create_app():
     # Register MCP (Model Context Protocol) Blueprint
     app.register_blueprint(mcp_bp)
 
+    # Periodic garbage collection on memory-intensive media endpoints
+    @app.after_request
+    def cleanup_memory(response):
+        if request.path.startswith(("/api/images", "/api/documents", "/api/audio")):
+            import gc
+            gc.collect()
+        return response
+
+    # -------------------------------------------------------------
+    # 0. Health Check Routes (Render & Uptime Pingers)
+    # -------------------------------------------------------------
+    @app.route("/health", methods=["GET"])
+    @app.route("/api/health", methods=["GET"])
+    def health_check():
+        return jsonify({"status": "healthy", "service": "accessai-backend"}), 200
+
     # -------------------------------------------------------------
     # 1. Authentication Routes
     # -------------------------------------------------------------

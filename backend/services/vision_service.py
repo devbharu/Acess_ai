@@ -1,6 +1,7 @@
 import base64
 import io
 import os
+import gc
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -27,12 +28,27 @@ class VisionService:
         return any(vm in clean for vm in ["qwen", "vision", "gpt-oss"])
 
     @staticmethod
-    def encode_image_base64(file_path: str) -> Optional[str]:
+    def encode_image_base64(file_path: str, max_dim: int = 1600) -> Optional[str]:
         """
-        Encodes an image file on disk to a base64 UTF-8 string.
+        Encodes an image to base64, automatically resizing high-res images to max_dim (1600px)
+        and compressing to JPEG to keep memory usage under 1 MB.
         """
         if not file_path or not os.path.exists(file_path):
             return None
+        try:
+            with Image.open(file_path) as img:
+                if max(img.size) > max_dim or img.format not in ("JPEG", "PNG"):
+                    copy_img = img.copy()
+                    if copy_img.mode in ("RGBA", "P"):
+                        copy_img = copy_img.convert("RGB")
+                    copy_img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    copy_img.save(buf, format="JPEG", quality=85, optimize=True)
+                    del copy_img
+                    return base64.b64encode(buf.getvalue()).decode("utf-8")
+        except Exception:
+            pass
+
         try:
             with open(file_path, "rb") as f:
                 return base64.b64encode(f.read()).decode("utf-8")
@@ -57,11 +73,18 @@ class VisionService:
         try:
             with Image.open(file_path) as img:
                 width, height = img.size
-                ocr_text = pytesseract.image_to_string(img).strip()
+                if max(img.size) > 1600:
+                    thumb = img.copy()
+                    thumb.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+                    ocr_text = pytesseract.image_to_string(thumb).strip()
+                    del thumb
+                else:
+                    ocr_text = pytesseract.image_to_string(img).strip()
         except Exception as e:
             logger.warning("Image OCR error: %s", e)
 
         image_description = VisionService._describe_with_groq(file_path, model_id, ocr_text)
+        gc.collect()
 
         return {
             "width": width,
@@ -93,9 +116,9 @@ class VisionService:
         )
 
         try:
-            with open(file_path, "rb") as f:
-                img_bytes = f.read()
-            b64_img = base64.b64encode(img_bytes).decode("utf-8")
+            b64_img = VisionService.encode_image_base64(file_path)
+            if not b64_img:
+                return "Failed to process image."
 
             if GROQ_API_KEY:
                 from groq import Groq
@@ -165,9 +188,9 @@ class VisionService:
         )
 
         try:
-            with open(file_path, "rb") as f:
-                img_bytes = f.read()
-            b64_img = base64.b64encode(img_bytes).decode("utf-8")
+            b64_img = VisionService.encode_image_base64(file_path)
+            if not b64_img:
+                raise ValueError("Could not encode image")
 
             if GROQ_API_KEY:
                 from groq import Groq

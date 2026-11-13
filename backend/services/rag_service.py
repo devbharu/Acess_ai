@@ -10,26 +10,54 @@ try:
 except ImportError:
     faiss = None
 
-try:
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-except ImportError:
-    class RecursiveCharacterTextSplitter:
-        def __init__(self, chunk_size=800, chunk_overlap=120, separators=None):
-            self.chunk_size = chunk_size
-            self.chunk_overlap = chunk_overlap
-        
-        def split_text(self, text: str) -> List[str]:
-            if not text:
-                return []
-            chunks = []
-            start = 0
-            while start < len(text):
-                end = min(start + self.chunk_size, len(text))
-                chunks.append(text[start:end])
-                if end == len(text):
-                    break
-                start += self.chunk_size - self.chunk_overlap
-            return chunks
+class RecursiveCharacterTextSplitter:
+    """
+    Lightweight, high-performance character text splitter.
+    Zero external dependencies and zero memory overhead.
+    """
+    def __init__(self, chunk_size: int = 800, chunk_overlap: int = 120, separators: Optional[List[str]] = None):
+        self.chunk_size = max(50, chunk_size)
+        self.chunk_overlap = min(chunk_overlap, self.chunk_size - 10)
+        self.separators = separators or ["\n\n", "\n", ". ", " ", ""]
+
+    def split_text(self, text: str) -> List[str]:
+        if not text:
+            return []
+        return self._split(text, self.separators)
+
+    def _split(self, text: str, separators: List[str]) -> List[str]:
+        text = text.strip()
+        if len(text) <= self.chunk_size:
+            return [text] if text else []
+
+        sep = separators[-1]
+        for s in separators:
+            if s and s in text:
+                sep = s
+                break
+
+        splits = text.split(sep) if sep else list(text)
+        chunks = []
+        current = ""
+
+        for part in splits:
+            piece = (current + sep + part).strip() if current else part.strip()
+            if len(piece) <= self.chunk_size:
+                current = piece
+            else:
+                if current:
+                    chunks.append(current)
+                next_seps = separators[separators.index(sep) + 1 :] if sep in separators[:-1] else []
+                if len(part) > self.chunk_size and next_seps:
+                    sub_chunks = self._split(part, next_seps)
+                    chunks.extend(sub_chunks[:-1])
+                    current = sub_chunks[-1] if sub_chunks else ""
+                else:
+                    current = part.strip()
+
+        if current:
+            chunks.append(current)
+        return [c for c in chunks if c.strip()]
 
 logger = logging.getLogger(__name__)
 
@@ -38,42 +66,55 @@ class EmbeddingEngine:
 
     def __init__(self):
         self.model = None
-        self._load_model()
+        self._checked_model = False
+        self.use_transformer = os.environ.get("USE_SENTENCE_TRANSFORMERS", "").lower() in ("true", "1")
 
-    def _load_model(self):
-        try:
-            from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
-            logger.info("SentenceTransformer model loaded.")
-        except Exception as e:
-            logger.warning("Could not load SentenceTransformer, using TF-IDF fallback: %s", e)
-            self.model = None
+    def _get_model(self):
+        if not self.use_transformer:
+            return None
+        if not self._checked_model:
+            self._checked_model = True
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer("all-MiniLM-L6-v2")
+                logger.info("SentenceTransformer model loaded.")
+            except Exception as e:
+                logger.warning("Could not load SentenceTransformer, using TF-IDF fallback: %s", e)
+                self.model = None
+        return self.model
 
     def encode(self, texts: List[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, 384), dtype="float32")
-        
-        if self.model:
+
+        model = self._get_model()
+        if model:
             try:
-                emb = self.model.encode(texts, convert_to_numpy=True)
+                emb = model.encode(texts, convert_to_numpy=True)
                 return np.array(emb, dtype="float32")
             except Exception as e:
                 logger.error("Encoding failed with transformer: %s", e)
 
-        # Fallback simple bag-of-words / character n-gram pseudo-embedding
+        # High-performance sublinear TF-IDF + n-gram hashing vectorizer (384-dim, unit-normalized)
         dim = 384
-        vectors = []
-        for text in texts:
+        vectors = np.zeros((len(texts), dim), dtype="float32")
+        for i, text in enumerate(texts):
             words = re.findall(r"\w+", text.lower())
-            vec = np.zeros(dim, dtype="float32")
+            if not words:
+                continue
+            word_counts = {}
             for w in words:
-                idx = hash(w) % dim
-                vec[idx] += 1.0
-            norm = np.linalg.norm(vec)
+                word_counts[w] = word_counts.get(w, 0) + 1
+            for w, count in word_counts.items():
+                idx = (hash(w) & 0x7FFFFFFF) % dim
+                tf = 1.0 + math.log(count)
+                weight = tf * (1.2 if len(w) > 4 else 1.0)
+                vectors[i, idx] += weight
+
+            norm = np.linalg.norm(vectors[i])
             if norm > 0:
-                vec /= norm
-            vectors.append(vec)
-        return np.array(vectors, dtype="float32")
+                vectors[i] /= norm
+        return vectors
 
 _embedding_engine = None
 def get_embedding_engine() -> EmbeddingEngine:
@@ -144,38 +185,52 @@ class ConversationIndex:
 
 class RAGService:
     _indices: Dict[str, ConversationIndex] = {}
+    _MAX_CACHED_INDICES = 15
 
     @classmethod
     def get_index(cls, conversation_id: str) -> ConversationIndex:
         cid = conversation_id or "default"
-        if cid not in cls._indices:
-            idx = ConversationIndex()
+        if cid in cls._indices:
+            # Move to end (most recently used)
+            idx = cls._indices.pop(cid)
             cls._indices[cid] = idx
-            if conversation_id:
-                try:
-                    from ..database import get_db
-                    with get_db() as conn:
-                        rows = conn.execute(
-                            "SELECT name, kind, file_path, extracted_text, image_description FROM attachments WHERE conversation_id = ?",
-                            (conversation_id,),
-                        ).fetchall()
-                        for r in rows:
-                            if r["kind"] == "image":
-                                cls.index_image(
-                                    conversation_id=conversation_id,
-                                    filename=r["name"],
-                                    ocr_text=r["extracted_text"] or "",
-                                    image_description=r["image_description"] or "",
-                                    file_path=r["file_path"] or "",
-                                )
-                            elif r["kind"] == "document" and r["extracted_text"]:
-                                cls.index_document(
-                                    conversation_id=conversation_id,
-                                    filename=r["name"],
-                                    pages_data=[{"page": 1, "text": r["extracted_text"]}],
-                                )
-                except Exception as ex:
-                    logger.debug("RAG warmup error: %s", ex)
+            return idx
+
+        # Evict oldest conversation index if exceeding limit
+        if len(cls._indices) >= cls._MAX_CACHED_INDICES:
+            try:
+                oldest_cid = next(iter(cls._indices))
+                del cls._indices[oldest_cid]
+            except Exception:
+                pass
+
+        idx = ConversationIndex()
+        cls._indices[cid] = idx
+        if conversation_id:
+            try:
+                from ..database import get_db
+                with get_db() as conn:
+                    rows = conn.execute(
+                        "SELECT name, kind, file_path, extracted_text, image_description FROM attachments WHERE conversation_id = ?",
+                        (conversation_id,),
+                    ).fetchall()
+                    for r in rows:
+                        if r["kind"] == "image":
+                            cls.index_image(
+                                conversation_id=conversation_id,
+                                filename=r["name"],
+                                ocr_text=r["extracted_text"] or "",
+                                image_description=r["image_description"] or "",
+                                file_path=r["file_path"] or "",
+                            )
+                        elif r["kind"] == "document" and r["extracted_text"]:
+                            cls.index_document(
+                                conversation_id=conversation_id,
+                                filename=r["name"],
+                                pages_data=[{"page": 1, "text": r["extracted_text"]}],
+                            )
+            except Exception as ex:
+                logger.debug("RAG warmup error: %s", ex)
         return cls._indices[cid]
 
     @classmethod

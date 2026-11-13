@@ -41,6 +41,7 @@ class DocumentService:
         pages_data = []
         ocr_used = False
         total_chars = 0
+        ocr_pages_done = 0
 
         if fitz:
             doc = fitz.open(file_path)
@@ -49,21 +50,26 @@ class DocumentService:
                 page = doc[page_num]
                 text = page.get_text().strip()
 
-                # If text is very short (< 30 chars), perform OCR on rendered page image
-                if len(text) < 30:
+                # If text is very short (< 30 chars), perform OCR on rendered page image (capped to 10 pages)
+                if len(text) < 30 and ocr_pages_done < 10:
                     try:
-                        pix = page.get_pixmap(dpi=150)
+                        pix = page.get_pixmap(dpi=120)
                         img = Image.open(io.BytesIO(pix.tobytes("png")))
                         ocr_text = pytesseract.image_to_string(img).strip()
                         if ocr_text:
                             text = ocr_text
                             ocr_used = True
+                        del pix
+                        del img
+                        ocr_pages_done += 1
                     except Exception as e:
                         logger.warning("OCR failed on PDF page %d: %s", page_num + 1, e)
 
                 pages_data.append({"page": page_num + 1, "text": text})
                 total_chars += len(text)
             doc.close()
+            import gc
+            gc.collect()
         else:
             with open(file_path, "rb") as f:
                 content = f.read().decode("utf-8", errors="ignore")

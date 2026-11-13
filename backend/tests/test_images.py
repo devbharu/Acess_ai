@@ -22,13 +22,10 @@ def test_upload_image(client, auth_headers):
 def test_multimodal_vision_model_detection():
     from backend.services.vision_service import VisionService
 
-    assert VisionService.is_vision_model("gemma4:31b-cloud") is True
-    assert VisionService.is_vision_model("gemma4-31b-cloud") is True
-    assert VisionService.is_vision_model("gemma") is True
-    assert VisionService.is_vision_model("llama3.2-vision") is True
-    assert VisionService.is_vision_model("llava") is True
-    assert VisionService.is_vision_model("nemotron-3-ultra:cloud") is False
-    assert VisionService.is_vision_model("gpt-oss:20b-cloud") is False
+    assert VisionService.is_vision_model("qwen/qwen3.8-27b") is True
+    assert VisionService.is_vision_model("openai/gpt-oss-120b") is True
+    assert VisionService.is_vision_model("qwen") is True
+    assert VisionService.is_vision_model("text-only-model") is False
 
 
 def test_multimodal_chat_image_passing(client, auth_headers):

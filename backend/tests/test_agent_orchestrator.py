@@ -219,10 +219,10 @@ def test_12_tool_failures_safe_handling():
 
 def test_13_unsupported_image_models():
     """Test 13: Unsupported image models are detected accurately."""
-    assert VisionService.is_vision_model("gemma4:31b-cloud") is True
-    assert VisionService.is_vision_model("moondream") is True
-    assert VisionService.is_vision_model("nemotron-3-ultra:cloud") is False
-    assert VisionService.is_vision_model("deepseek-r1:7b") is False
+    assert VisionService.is_vision_model("qwen/qwen3.8-27b") is True
+    assert VisionService.is_vision_model("openai/gpt-oss-120b") is True
+    assert VisionService.is_vision_model("text-only-model") is False
+    assert VisionService.is_vision_model("bert-base-uncased") is False
 
 
 def test_14_citations_reference_extracted_content(client, auth_headers):

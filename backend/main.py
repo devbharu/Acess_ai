@@ -28,6 +28,7 @@ try:
     from backend.services.speech_service import SpeechService
     from backend.services.metrics_service import MetricsService
     from backend.services.orchestrator import Orchestrator
+    from backend.mcp.sse_server import mcp_bp
 except ImportError:
     from config import UPLOADS_DIR, AUDIO_DIR, ARTIFACTS_DIR, DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
     from database import get_db, init_db
@@ -40,6 +41,7 @@ except ImportError:
     from services.speech_service import SpeechService
     from services.metrics_service import MetricsService
     from services.orchestrator import Orchestrator
+    from mcp.sse_server import mcp_bp
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -51,6 +53,9 @@ def create_app():
 
     # Initialize SQLite database
     init_db()
+
+    # Register MCP (Model Context Protocol) Blueprint
+    app.register_blueprint(mcp_bp)
 
     # -------------------------------------------------------------
     # 1. Authentication Routes
@@ -386,7 +391,7 @@ def create_app():
         file.save(save_path)
 
         user_settings = _get_user_settings(g.user_id)
-        model = user_settings.get("model", "gemma4:31b-cloud")
+        model = user_settings.get("model", "qwen/qwen3.8-27b")
 
         # Analyze with OCR and Ollama Multimodal Vision
         analysis = VisionService.analyze_image(save_path, model_id=model)
@@ -484,7 +489,7 @@ def create_app():
 
         start_time = time.time()
         user_settings = _get_user_settings(user_id)
-        model_name = normalize_model_name(user_settings.get("model", "nemotron-3-ultra:cloud"))
+        model_name = normalize_model_name(user_settings.get("model", "openai/gpt-oss-120b"))
         retrieval_k = int(user_settings.get("retrieval_k", 4))
 
         # Create or initialize conversation if needed

@@ -19,24 +19,16 @@ logger = logging.getLogger("accessai.agent")
 
 def normalize_model_name(name: Optional[str]) -> str:
     """
-    Normalizes model identifiers so they match active Ollama model tags.
-    Handles legacy hyphens, missing tags, and known aliases.
+    Normalizes model identifiers to one of the two active Groq models:
+    - openai/gpt-oss-120b
+    - qwen/qwen3.8-27b
     """
     if not name:
-        return "nemotron-3-ultra:cloud"
-    n = name.strip()
-    if n.endswith("-cloud"):
-        n = n[:-6] + ":cloud"
-
-    alias_map = {
-        "nemotron-3-ultra-cloud": "nemotron-3-ultra:cloud",
-        "nemotron-3-ultra": "nemotron-3-ultra:cloud",
-        "gemma4-31b-cloud": "gemma4:31b-cloud",
-        "gemma4": "gemma4:31b-cloud",
-        "gpt-oss-20b-cloud": "gpt-oss:20b-cloud",
-        "gpt-oss-120b-cloud": "gpt-oss:120b-cloud",
-    }
-    return alias_map.get(n, n)
+        return "openai/gpt-oss-120b"
+    n = name.strip().lower()
+    if "qwen" in n or "gemma" in n:
+        return "qwen/qwen3.8-27b"
+    return "openai/gpt-oss-120b"
 
 
 class AgentService:

@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
-import { Paperclip, FileDown } from 'lucide-react';
+import { Paperclip, FileDown, Cpu } from 'lucide-react';
 import LookupPopover from './LookupPopover';
+import McpStatusPopover from './McpStatusPopover';
 
 function formatFileSize(bytes) {
   if (!bytes || isNaN(bytes)) return '';
@@ -124,6 +125,31 @@ function ConversationHeader({
               title="Artifacts"
               items={artifactItems}
               emptyMessage="No artifacts generated in this chat yet."
+              onClose={() => setActivePopover(null)}
+              alignRight
+            />
+          )}
+        </div>
+
+        {/* MCP Server & Tools Button */}
+        <div className="lookup-popover-wrapper">
+          <button
+            type="button"
+            className={`btn btn-sm lookup-trigger-btn ${activePopover === 'mcp' ? 'active' : ''}`}
+            onClick={() => togglePopover('mcp')}
+            aria-expanded={activePopover === 'mcp'}
+            aria-label="Model Context Protocol Server & Tools"
+            title="Inspect connected MCP tools and server status"
+          >
+            <Cpu size={14} color="#ea580c" />
+            <span>MCP Tools</span>
+            <span className="pill-counter has-items" style={{ background: '#ea580c33', color: '#f97316' }}>
+              18
+            </span>
+          </button>
+
+          {activePopover === 'mcp' && (
+            <McpStatusPopover
               onClose={() => setActivePopover(null)}
               alignRight
             />

@@ -3,28 +3,45 @@ import logging
 import re
 import requests
 from typing import Generator, List, Dict, Any, Optional
-from ..config import OLLAMA_BASE_URL, DEFAULT_SYSTEM_PROMPT
+from ..config import GROQ_API_KEY, DEFAULT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
 class LLMService:
     @staticmethod
     def stream_chat(
-        messages: List[Dict[str, str]],
-        evidence: List[Dict[str, Any]],
-        settings: Dict[str, Any],
-        images: Optional[List[str]] = None
+        messages: Optional[List[Dict[str, str]]] = None,
+        evidence: Optional[List[Dict[str, Any]]] = None,
+        settings: Optional[Dict[str, Any]] = None,
+        images: Optional[List[str]] = None,
+        *,
+        history: Optional[List[Dict[str, str]]] = None,
+        model_name: Optional[str] = None,
+        **kwargs: Any,
     ) -> Generator[str, None, None]:
         """
-        Stream response tokens from Ollama with grounded evidence context.
-        For multimodal models like Gemma, passes base64 images directly.
-        Falls back to rule-based grounded extraction if Ollama is unreachable.
+        Stream response tokens from Groq with grounded evidence context.
+        For multimodal models, passes base64 images directly.
+        Falls back to rule-based grounded extraction if Groq is unreachable.
         """
         import os
         from .agent_service import normalize_model_name
         from .vision_service import VisionService
 
-        model = normalize_model_name(settings.get("model", "gemma4:31b-cloud"))
+        if messages is None:
+            messages = history or []
+        if evidence is None:
+            evidence = []
+        if settings is None:
+            settings = {}
+        else:
+            settings = dict(settings)
+        if model_name and "model" not in settings:
+            settings["model"] = model_name
+        if images is None:
+            images = []
+
+        model = normalize_model_name(settings.get("model", "openai/gpt-oss-120b"))
         system_prompt = settings.get("system_prompt", DEFAULT_SYSTEM_PROMPT)
         temperature = float(settings.get("temperature", 0.3))
         top_p = float(settings.get("top_p", 0.9))
@@ -76,63 +93,60 @@ class LLMService:
 
         full_system = f"{system_prompt}\n\n=== VERIFIED EVIDENCE ===\n{evidence_block}\n=== END EVIDENCE ==="
 
-        # Build payload for Ollama
-        ollama_messages = [{"role": "system", "content": full_system}]
-        for m in messages:
-            ollama_messages.append({"role": m["role"], "content": m["content"]})
-
-        # Attach images directly to the user message for multimodal models (Gemma)
-        if is_vision and b64_images:
-            for m in reversed(ollama_messages):
-                if m.get("role") == "user":
-                    m["images"] = b64_images
-                    break
-
-        options = {
-            "temperature": temperature,
-            "top_p": top_p,
-            "top_k": top_k,
-            "num_ctx": num_ctx,
-            "num_predict": num_predict,
-            "repeat_penalty": repeat_penalty,
-        }
-        if seed is not None:
-            options["seed"] = int(seed)
-
-        payload = {
-            "model": model,
-            "messages": ollama_messages,
-            "options": options,
-            "stream": True,
-        }
-
-        # Try streaming from Ollama
+        # Stream response from Groq
         try:
-            res = requests.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
-                json=payload,
-                stream=True,
-                timeout=(5, 60),
-            )
-            if res.status_code == 200:
-                for line in res.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line.decode("utf-8"))
-                        msg = data.get("message", {})
-                        content = msg.get("content", "")
-                        if content:
-                            yield content
-                        if data.get("done", False):
-                            return
-                    except Exception:
-                        continue
-                return
-            else:
-                logger.warning("Ollama /api/chat returned status %d", res.status_code)
+            from groq import Groq
+            if not GROQ_API_KEY:
+                logger.warning("GROQ_API_KEY not set in environment")
+                raise ValueError("GROQ_API_KEY is missing")
+
+            client = Groq(api_key=GROQ_API_KEY)
+
+            groq_messages = [{"role": "system", "content": full_system}]
+            for m in messages:
+                role = m["role"]
+                content = m["content"]
+                if role == "user" and is_vision and b64_images:
+                    user_content = [{"type": "text", "text": content}]
+                    for b64 in b64_images:
+                        user_content.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                        })
+                    groq_messages.append({"role": "user", "content": user_content})
+                else:
+                    groq_messages.append({"role": role, "content": content})
+
+            kwargs = {
+                "model": model,
+                "messages": groq_messages,
+                "temperature": temperature,
+                "max_completion_tokens": max(64, num_predict),
+                "top_p": top_p,
+                "stream": True,
+            }
+            if "gpt-oss" in model:
+                kwargs["reasoning_effort"] = "medium"
+
+            try:
+                completion = client.chat.completions.create(**kwargs)
+            except Exception as pe:
+                logger.debug("Retrying groq call with standard max_tokens: %s", pe)
+                kwargs.pop("reasoning_effort", None)
+                kwargs.pop("max_completion_tokens", None)
+                kwargs["max_tokens"] = max(64, num_predict)
+                completion = client.chat.completions.create(**kwargs)
+
+            for chunk in completion:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, "reasoning") and delta.reasoning:
+                        yield delta.reasoning
+                    if delta.content:
+                        yield delta.content
+            return
         except Exception as e:
-            logger.warning("Ollama call failed (%s), using grounded fallback responder", e)
+            logger.warning("Groq call failed (%s), using grounded fallback responder", e)
 
         # Grounded reasoning fallback
         latest_question = messages[-1]["content"] if messages else ""
@@ -252,34 +266,31 @@ class LLMService:
         )
 
         try:
-            res = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "format": "json",
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.4,
-                        "num_predict": 120,
-                    },
-                },
-                timeout=3.5,
+            from groq import Groq
+            if not GROQ_API_KEY:
+                raise ValueError("GROQ_API_KEY missing")
+
+            client = Groq(api_key=GROQ_API_KEY)
+            res = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+                max_tokens=150,
+                response_format={"type": "json_object"},
             )
-            if res.status_code == 200:
-                raw = res.json().get("response", "").strip()
-                if raw.startswith("```"):
-                    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-                    raw = re.sub(r"\s*```$", "", raw)
-                data = json.loads(raw.strip())
-                items = []
-                if isinstance(data, list):
-                    items = data
-                elif isinstance(data, dict):
-                    for k in ["questions", "follow_ups", "follow_up_questions", "suggestions"]:
-                        if k in data and isinstance(data[k], list):
-                            items = data[k]
-                            break
+            raw = (res.choices[0].message.content or "").strip()
+            if raw.startswith("```"):
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
+            data = json.loads(raw.strip())
+            items = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                for k in ["questions", "follow_ups", "follow_up_questions", "suggestions"]:
+                    if k in data and isinstance(data[k], list):
+                        items = data[k]
+                        break
 
                 valid_questions = []
                 for q in items:
@@ -408,25 +419,22 @@ class LLMService:
         )
 
         try:
-            res = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.3,
-                        "num_predict": 15,
-                    },
-                },
-                timeout=2.5,
+            from groq import Groq
+            if not GROQ_API_KEY:
+                raise ValueError("GROQ_API_KEY missing")
+
+            client = Groq(api_key=GROQ_API_KEY)
+            res = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=20,
             )
-            if res.status_code == 200:
-                raw = res.json().get("response", "").strip()
-                cleaned = re.sub(r'[\'"`.]', '', raw).strip()
-                words = cleaned.split()
-                if 1 <= len(words) <= 4:
-                    return " ".join([w.capitalize() for w in words[:3]])
+            raw = (res.choices[0].message.content or "").strip()
+            cleaned = re.sub(r'[\'"`.]', '', raw).strip()
+            words = cleaned.split()
+            if 1 <= len(words) <= 4:
+                return " ".join([w.capitalize() for w in words[:3]])
         except Exception as e:
             logger.info("generate_chat_title skipped/timed out (%s), using dynamic fallback", e)
 

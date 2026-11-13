@@ -66,6 +66,13 @@ export const api = {
 
   getMetrics: () => request('/metrics'),
   runEvaluation: (suite) => request('/metrics/run', { method: 'POST', json: { suite } }),
+
+  // Model Context Protocol (MCP) endpoints
+  getMcpStatus: () => request('/mcp/status'),
+  getMcpTools: () => request('/mcp/tools'),
+  getMcpResources: () => request('/mcp/resources'),
+  getMcpPrompts: () => request('/mcp/prompts'),
+  executeMcpTool: (tool, args = {}) => request('/mcp/execute', { method: 'POST', json: { tool, arguments: args } }),
 };
 
 /** POST /chat and parse the server-sent events stream. */

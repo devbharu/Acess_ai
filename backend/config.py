@@ -20,12 +20,17 @@ try:
 except ImportError:
     pass
 
-DATABASE_PATH = os.environ.get("DATABASE_PATH", str(DATA_DIR / "accessai.db"))
+_raw_db = os.environ.get("DATABASE_PATH")
+if _raw_db:
+    _p = Path(_raw_db)
+    DATABASE_PATH = str(_p if _p.is_absolute() else (BASE_DIR / _p).resolve())
+else:
+    DATABASE_PATH = str(DATA_DIR / "accessai.db")
 SECRET_KEY = os.environ.get("SECRET_KEY", os.environ.get("JWT_SECRET", "accessai-super-secret-key-2026-prod"))
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+GROQ_API_KEY = (os.environ.get("GROQ_API_KEY") or "").strip()
 
 DEFAULT_SYSTEM_PROMPT = """You are AccessAI — an intelligent, context-aware, multimodal accessibility agent.
 You assist both visually impaired and sighted users with documents (PDFs, reports), images (photos, charts, scene understanding, OCR), and natural conversation.
@@ -40,12 +45,12 @@ Key capabilities & instructions:
 4. Voice & Speech-Friendly: Keep explanations structured and articulate so they can be read aloud cleanly by Text-to-Speech (TTS)."""
 
 DEFAULT_SETTINGS = {
-    "model": "gemma4:31b-cloud",
+    "model": "openai/gpt-oss-120b",
     "temperature": 0.3,
     "top_p": 0.9,
     "top_k": 40,
     "num_ctx": 8192,
-    "num_predict": 1024,
+    "num_predict": 2048,
     "repeat_penalty": 1.1,
     "seed": None,
     "system_prompt": DEFAULT_SYSTEM_PROMPT,

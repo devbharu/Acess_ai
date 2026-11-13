@@ -6,17 +6,13 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from PIL import Image
 import pytesseract
-import requests
-from ..config import OLLAMA_BASE_URL
+from ..config import GROQ_API_KEY
 
 logger = logging.getLogger(__name__)
 
 VISION_CAPABLE_MODELS = {
-    "gemma4:31b-cloud",
-    "llama3.2-vision",
-    "llava",
-    "bakllava",
-    "moondream",
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-120b",
 }
 
 class VisionService:
@@ -28,7 +24,7 @@ class VisionService:
         if not model_id:
             return False
         clean = model_id.lower().strip()
-        return any(vm in clean for vm in ["vision", "llava", "gemma", "gemma4", "moondream", "multimodal", "bakllava"])
+        return any(vm in clean for vm in ["qwen", "vision", "gpt-oss"])
 
     @staticmethod
     def encode_image_base64(file_path: str) -> Optional[str]:
@@ -45,9 +41,9 @@ class VisionService:
             return None
 
     @staticmethod
-    def analyze_image(file_path: str, model_id: str = "gemma4:31b-cloud") -> Dict[str, Any]:
+    def analyze_image(file_path: str, model_id: str = "qwen/qwen3.8-27b") -> Dict[str, Any]:
         """
-        Runs OCR on the image and calls Ollama vision to generate scene understanding.
+        Runs OCR on the image and calls Groq vision to generate scene understanding.
         """
         ocr_text = ""
         width, height = 0, 0
@@ -65,7 +61,7 @@ class VisionService:
         except Exception as e:
             logger.warning("Image OCR error: %s", e)
 
-        image_description = VisionService._describe_with_ollama(file_path, model_id, ocr_text)
+        image_description = VisionService._describe_with_groq(file_path, model_id, ocr_text)
 
         return {
             "width": width,
@@ -75,7 +71,7 @@ class VisionService:
         }
 
     @staticmethod
-    def answer_question_about_image(file_path: str, question: str, model_id: str = "gemma4:31b-cloud") -> str:
+    def answer_question_about_image(file_path: str, question: str, model_id: str = "qwen/qwen3.8-27b") -> str:
         """
         Answers a specific user question about an image using multimodal vision + OCR text.
         """
@@ -101,29 +97,33 @@ class VisionService:
                 img_bytes = f.read()
             b64_img = base64.b64encode(img_bytes).decode("utf-8")
 
-            candidate_models = []
-            if VisionService.is_vision_model(model_id):
-                candidate_models.append(model_id)
-            if "gemma4:31b-cloud" not in candidate_models:
-                candidate_models.append("gemma4:31b-cloud")
-
-            for m in candidate_models:
-                try:
-                    payload = {
-                        "model": m,
-                        "prompt": prompt,
-                        "images": [b64_img],
-                        "stream": False,
+            if GROQ_API_KEY:
+                from groq import Groq
+                client = Groq(api_key=GROQ_API_KEY)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                            }
+                        ]
                     }
-                    res = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=12)
-                    if res.status_code == 200:
-                        ans = res.json().get("response", "").strip()
-                        if ans:
-                            return ans
-                except Exception:
-                    continue
+                ]
+                res = client.chat.completions.create(
+                    model="qwen/qwen3.8-27b" if "qwen" in model_id.lower() else "openai/gpt-oss-120b",
+                    messages=messages,
+                    max_tokens=512,
+                    temperature=0.3,
+                )
+                if res.choices and len(res.choices) > 0:
+                    ans = res.choices[0].message.content or ""
+                    if ans.strip():
+                        return ans.strip()
         except Exception as e:
-            logger.warning("Error answering question about image: %s", e)
+            logger.warning("Groq visual Q&A failed (%s), using OCR fallback", e)
 
         # Fallback using image properties and OCR
         if ocr_text:
@@ -131,7 +131,7 @@ class VisionService:
         return "The image shows the requested subject. Detailed visual analysis was completed based on scene geometry."
 
     @staticmethod
-    def compare_images(file_path_1: str, file_path_2: str, model_id: str = "gemma4:31b-cloud") -> str:
+    def compare_images(file_path_1: str, file_path_2: str, model_id: str = "qwen/qwen3.8-27b") -> str:
         """
         Compares two images and highlights differences.
         """
@@ -154,7 +154,7 @@ class VisionService:
         )
 
     @staticmethod
-    def _describe_with_ollama(file_path: str, model_id: str, ocr_text: str = "") -> str:
+    def _describe_with_groq(file_path: str, model_id: str, ocr_text: str = "") -> str:
         if not file_path or not os.path.exists(file_path):
             return "Image file not found."
 
@@ -169,31 +169,33 @@ class VisionService:
                 img_bytes = f.read()
             b64_img = base64.b64encode(img_bytes).decode("utf-8")
 
-            candidate_models = []
-            if VisionService.is_vision_model(model_id):
-                candidate_models.append(model_id)
-            if "gemma4:31b-cloud" not in candidate_models:
-                candidate_models.append("gemma4:31b-cloud")
-
-            for m in candidate_models:
-                try:
-                    payload = {
-                        "model": m,
-                        "prompt": prompt,
-                        "images": [b64_img],
-                        "stream": False,
+            if GROQ_API_KEY:
+                from groq import Groq
+                client = Groq(api_key=GROQ_API_KEY)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                            }
+                        ]
                     }
-                    res = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=12)
-                    if res.status_code == 200:
-                        desc = res.json().get("response", "").strip()
-                        if desc:
-                            return desc
-                except Exception as ex:
-                    logger.debug("Vision call for %s failed: %s", m, ex)
-                    continue
-
+                ]
+                res = client.chat.completions.create(
+                    model="qwen/qwen3.8-27b" if "qwen" in model_id.lower() else "openai/gpt-oss-120b",
+                    messages=messages,
+                    max_tokens=512,
+                    temperature=0.3,
+                )
+                if res.choices and len(res.choices) > 0:
+                    desc = res.choices[0].message.content or ""
+                    if desc.strip():
+                        return desc.strip()
         except Exception as e:
-            logger.warning("Ollama vision call failed: %s", e)
+            logger.warning("Groq vision description failed (%s), using fallback", e)
 
         try:
             with Image.open(file_path) as im:

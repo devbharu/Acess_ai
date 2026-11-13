@@ -110,7 +110,7 @@ class MetricsService:
         }
 
     @classmethod
-    def run_suite(cls, suite: str = "all", model_name: str = "gemma4:31b-cloud") -> Dict[str, Any]:
+    def run_suite(cls, suite: str = "all", model_name: str = "openai/gpt-oss-120b") -> Dict[str, Any]:
         """
         Executes benchmark test evaluation across Speech (WER), OCR (CER), Retrieval & QA Grounding.
         """

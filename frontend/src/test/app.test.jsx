@@ -38,7 +38,7 @@ function mockApi() {
       ['meta', { conversation_id: 'c1' }],
       ['token', { text: 'The total is ' }], ['token', { text: '42,500.' }],
       ['sources', [{ type: 'ocr', source: 'invoice.pdf', page: 1, score: 0.9, text: 'Total: 42,500' }]],
-      ['done', { latency_ms: 1500, model: 'gemma4:31b-cloud' }],
+      ['done', { latency_ms: 1500, model: 'openai/gpt-oss-120b' }],
     ]);
     return json({});
   });

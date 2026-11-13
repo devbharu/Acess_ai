@@ -103,6 +103,11 @@ function ActivityStep({ activity }) {
               {targetPage ? ` : p.${targetPage}` : ''}
             </span>
           )}
+          {metadata?.tool && (
+            <span className="activity-file-badge" style={{ background: 'rgba(234, 88, 12, 0.15)', color: '#f97316', borderColor: 'rgba(234, 88, 12, 0.3)' }}>
+              MCP
+            </span>
+          )}
         </div>
 
         <div className="activity-meta-wrap">

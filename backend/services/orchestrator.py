@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Generator, List, Dict, Any, Optional, Tuple, Callable
 
-from ..config import OLLAMA_BASE_URL, DEFAULT_SYSTEM_PROMPT
+from ..config import DEFAULT_SYSTEM_PROMPT
 from ..database import get_db
 from .tools import registry
 from .context import ContextResolver, ConversationState
@@ -19,22 +19,17 @@ logger = logging.getLogger("accessai.orchestrator")
 
 
 def normalize_model_name(name: Optional[str]) -> str:
-    """Normalizes model names to valid Ollama tags."""
+    """
+    Normalizes model identifiers to one of the two active Groq models:
+    - openai/gpt-oss-120b
+    - qwen/qwen3.8-27b
+    """
     if not name:
-        return "nemotron-3-ultra:cloud"
-    n = name.strip()
-    if n.endswith("-cloud"):
-        n = n[:-6] + ":cloud"
-
-    alias_map = {
-        "nemotron-3-ultra-cloud": "nemotron-3-ultra:cloud",
-        "nemotron-3-ultra": "nemotron-3-ultra:cloud",
-        "gemma4-31b-cloud": "gemma4:31b-cloud",
-        "gemma4": "gemma4:31b-cloud",
-        "gpt-oss-20b-cloud": "gpt-oss:20b-cloud",
-        "gpt-oss-120b-cloud": "gpt-oss:120b-cloud",
-    }
-    return alias_map.get(n, n)
+        return "openai/gpt-oss-120b"
+    n = name.strip().lower()
+    if "qwen" in n or "gemma" in n:
+        return "qwen/qwen3.8-27b"
+    return "openai/gpt-oss-120b"
 
 
 def clean_prompt(prompt: str) -> str:

@@ -11,6 +11,19 @@ from ..config import AUDIO_DIR
 
 logger = logging.getLogger(__name__)
 
+# Patch av.open if needed to maintain compatibility between PyAV (>=14/19) and faster-whisper
+try:
+    import av
+    if hasattr(av, "open"):
+        _orig_av_open = av.open
+        def _safe_av_open(*args, **kwargs):
+            kwargs.pop("metadata_errors", None)
+            kwargs.pop("metadata_encoding", None)
+            return _orig_av_open(*args, **kwargs)
+        av.open = _safe_av_open
+except Exception:
+    pass
+
 # Cache for Whisper models
 _whisper_cache = {}
 

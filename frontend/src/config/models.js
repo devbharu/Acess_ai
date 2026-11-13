@@ -1,8 +1,6 @@
 export const MODELS = [
-  { id: 'nemotron-3-ultra:cloud', label: 'Nemotron 3 Ultra', family: 'NVIDIA', size: '550B' },
-  { id: 'gemma4:31b-cloud', label: 'Gemma 4 31B', family: 'Google', size: '31B', multimodal: true },
-  { id: 'gpt-oss:20b-cloud', label: 'GPT-OSS 20B', family: 'OpenAI', size: '20B' },
-  { id: 'gpt-oss:120b-cloud', label: 'GPT-OSS 120B', family: 'OpenAI', size: '120B' },
+  { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', family: 'OpenAI', size: '120B' },
+  { id: 'qwen/qwen3.8-27b', label: 'qwen/qwen3.8-27b', family: 'Alibaba Cloud', size: '27B', multimodal: true },
 ];
 
 export const modelLabel = (id) => MODELS.find((m) => m.id === id)?.label ?? id;
@@ -20,7 +18,7 @@ Key capabilities & instructions:
 4. Voice & Speech-Friendly: Keep explanations structured and articulate so they can be read aloud cleanly by Text-to-Speech (TTS).`;
 
 export const DEFAULT_SETTINGS = {
-  model: 'nemotron-3-ultra:cloud',
+  model: 'openai/gpt-oss-120b',
   temperature: 0.3,
   top_p: 0.9,
   top_k: 40,

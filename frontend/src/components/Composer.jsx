@@ -115,10 +115,20 @@ export default function Composer() {
             title="Switch AI model"
             aria-label="Model"
           >
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}{m.multimodal ? ' (Vision)' : ''}
-              </option>
+            {Object.entries(
+              MODELS.reduce((acc, m) => {
+                if (!acc[m.family]) acc[m.family] = [];
+                acc[m.family].push(m);
+                return acc;
+              }, {})
+            ).map(([family, list]) => (
+              <optgroup key={family} label={family}>
+                {list.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}{m.multimodal ? ' (Vision)' : ''}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

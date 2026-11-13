@@ -59,4 +59,53 @@ describe('Markdown output parser', () => {
     expect(checkboxes[0].checked).toBe(true);
     expect(checkboxes[1].checked).toBe(false);
   });
+
+  it('renders callout alert boxes for [!NOTE] and [!TIP]', () => {
+    const md = '> [!NOTE]\n> Keep this in mind when wiring.';
+    render(<Markdown>{md}</Markdown>);
+    expect(screen.getByRole('note')).toBeTruthy();
+    expect(screen.getByText('Note')).toBeTruthy();
+    expect(screen.getByText('Keep this in mind when wiring.')).toBeTruthy();
+  });
+
+  it('renders thinking disclosure blocks for <think> tags', () => {
+    const md = '<think>\nChecking pin 13 configuration...\n</think>\nThe circuit is complete.';
+    render(<Markdown>{md}</Markdown>);
+    expect(screen.getByText(/Thought process/i)).toBeTruthy();
+    expect(screen.getByText('The circuit is complete.')).toBeTruthy();
+  });
+
+  it('auto-closes dangling unclosed code blocks from streaming', () => {
+    const streamingMd = 'Here is the code:\n```python\nprint("Hello")';
+    render(<Markdown>{streamingMd}</Markdown>);
+    expect(screen.getByText('Python')).toBeTruthy();
+    expect(screen.getByText('print')).toBeTruthy();
+    expect(screen.getByText('"Hello"')).toBeTruthy();
+  });
+
+  it('renders inline math formulas like $d_{model}$ with subscript', () => {
+    const md = 'The hidden dimension is $d_{model}$ in transformers.';
+    render(<Markdown>{md}</Markdown>);
+    const inlineMath = document.querySelector('.md-inline-math');
+    expect(inlineMath).toBeTruthy();
+    const sub = inlineMath.querySelector('.math-sub');
+    expect(sub).toBeTruthy();
+    expect(sub.textContent).toContain('model');
+  });
+
+  it('renders block math formulas with Sine/Cosine and fractions', () => {
+    const md = 'Positional encoding formula:\n\n$$PE_{(pos, 2i)} = \\sin(pos / 10000^{2i/d_{model}})$$';
+    render(<Markdown>{md}</Markdown>);
+    const blockMath = document.querySelector('.md-block-math');
+    expect(blockMath).toBeTruthy();
+    expect(blockMath.textContent).toContain('sin');
+    expect(blockMath.textContent).toContain('10000');
+    expect(screen.getByRole('button', { name: 'Copy formula' })).toBeTruthy();
+  });
+
+  it('preserves currency dollar signs like $50 without turning into math', () => {
+    const md = 'The price of the sensor is $50 each, or $100 for two.';
+    render(<Markdown>{md}</Markdown>);
+    expect(screen.getByText(/The price of the sensor is \$50 each, or \$100 for two/)).toBeTruthy();
+  });
 });

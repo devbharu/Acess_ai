@@ -35,7 +35,7 @@ const ModelPanel = memo(function ModelPanel({ settings, update }) {
               {settings.model === m.id && <Check size={18} aria-hidden />}
             </div>
             <strong>{m.label}</strong>
-            <code>{m.id}</code>
+            <span className="muted" style={{ fontSize: '0.8rem' }}>{m.family} · {m.size}</span>
           </button>
         ))}
       </div>
